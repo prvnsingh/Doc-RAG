@@ -8,10 +8,9 @@ import uuid
 from typing import List
 from langchain_core.documents import Document
 from components.base_component import BaseComponent
-from langchain.storage import InMemoryStore
 from langchain_chroma import Chroma
 from langchain_aws import BedrockEmbeddings
-from langchain.retrievers.multi_vector import MultiVectorRetriever
+from settings import settings
 
 class Vectorizer(BaseComponent):
     """
@@ -33,16 +32,16 @@ class Vectorizer(BaseComponent):
 
     def __init__(self):
         """Initialize the vectorizer with embedding model and storage components."""
-        super().__init__('VectorizerV2')
+        super().__init__('Vectorizer')
 
         # Initialize AWS Bedrock embedding model
-        self.embedding_function = BedrockEmbeddings(model_id="amazon.titan-embed-text-v2:0")
+        self.embedding_function = BedrockEmbeddings(model_id=settings.embedding_model)
         
         # Initialize Chroma vector store
         self.vector_store = Chroma(
             collection_name="MRAG_Mech_book",
             embedding_function=self.embedding_function,
-            persist_directory="resources/chroma_langchain_db",  # Where to save data locally
+            persist_directory=settings.persist_directory,  # Where to save data locally
         )
 
         self.id_key = "doc_id"

@@ -3,7 +3,7 @@ Content retrieval service for the Multi-Modal RAG system.
 This module provides functionality to retrieve relevant content (text and images) based on user queries
 and generate responses using a language model.
 """
-
+from settings import settings
 from components.base_component import BaseComponent
 from .bedrock import MLLM
 from base64 import b64decode
@@ -14,7 +14,7 @@ from langchain_aws import BedrockEmbeddings
 import traceback
 
 
-class RetrieverV2(BaseComponent):
+class Retriever(BaseComponent):
     """
     Content retriever that fetches relevant information based on user queries.
     
@@ -33,16 +33,12 @@ class RetrieverV2(BaseComponent):
     def __init__(self):
         """
         Initialize the retriever with necessary components.
-        
-        Args:
-            retriever: Multi-vector retriever instance for content retrieval
         """
-        super().__init__('RetrieverV2')
-        persist_directory = "resources/chroma_langchain_db_v2"
-        embeddings = BedrockEmbeddings(model_id="amazon.titan-embed-text-v2:0")
+        super().__init__('Retriever')
+        embeddings = BedrockEmbeddings(model_id=settings.embedding_model)
         self.vector_db = Chroma(
             collection_name="MRAG_Mech_book",
-            persist_directory=persist_directory,
+            persist_directory=settings.persist_directory,
             embedding_function=embeddings
         )
         self.model = MLLM()
@@ -149,7 +145,11 @@ class RetrieverV2(BaseComponent):
             
             # Deduplicate and process retrieved documents
             for doc in docs:
+                self.logger.info(str(type(doc)))
+                self.logger.info(doc)
                 if doc.metadata['doc_id'] not in seen_doc:
+                    self.logger.info(doc.metadata['doc_id'])
+                    self.logger.info(doc.metadata['original_doc'])
                     seen_doc.add(doc.metadata['doc_id'])
                     unique_docs.append(doc.metadata['original_doc'])
 

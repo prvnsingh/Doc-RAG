@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     ANTHROPIC_VERSION: str = "bedrock-2023-05-31"
     MAX_TOKENS: int = 20000
     TEMP: float = 0.5
+    persist_directory: str = "resources/chroma_langchain_db"
+    embedding_model: str = "amazon.titan-embed-text-v2:0"
 
 # Create a global settings instance
 settings = Settings()
