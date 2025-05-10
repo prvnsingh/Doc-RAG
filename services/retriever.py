@@ -1,32 +1,63 @@
+"""
+Content retrieval service for the Multi-Modal RAG system.
+This module provides functionality to retrieve relevant content (text and images) based on user queries
+and generate responses using a language model.
+"""
+
 from components.base_component import BaseComponent
-from .vectorizer import Vectorizer
 from .bedrock import MLLM
 from base64 import b64decode
 from typing import List, Dict, Any
 from app.prompt import user_query_prompt
-from langchain.vectorstores import FAISS
-from langchain.retrievers import MultiVectorRetriever
-from langchain.storage import InMemoryStore
+from langchain_chroma import Chroma
 from langchain_aws import BedrockEmbeddings
+import traceback
 
 
-class Retriever(BaseComponent):
+class RetrieverV2(BaseComponent):
+    """
+    Content retriever that fetches relevant information based on user queries.
+    
+    This class handles:
+    1. Retrieving relevant content from the vector store
+    2. Processing and deduplicating retrieved documents
+    3. Building prompts with context for the language model
+    4. Generating responses using the language model
+    
+    Attributes:
+        vector_db: Chroma vector database instance
+        model: Language model instance for generating responses
+        retriever: Multi-vector retriever for fetching content
+    """
+
     def __init__(self):
-        super().__init__('Retriever')
+        """
+        Initialize the retriever with necessary components.
+        
+        Args:
+            retriever: Multi-vector retriever instance for content retrieval
+        """
+        super().__init__('RetrieverV2')
+        persist_directory = "resources/chroma_langchain_db_v2"
         embeddings = BedrockEmbeddings(model_id="amazon.titan-embed-text-v2:0")
-        self.vector_db = FAISS.load_local(
-            "resources/faiss_index", 
-            embeddings, 
-            allow_dangerous_deserialization=True
-        )
-        self.retriever = MultiVectorRetriever(
-            vectorstore=self.vector_db,
-            id_key="doc_id",
+        self.vector_db = Chroma(
+            collection_name="MRAG_Mech_book",
+            persist_directory=persist_directory,
+            embedding_function=embeddings
         )
         self.model = MLLM()
+        self.retriever = self.vector_db.as_retriever()
 
-    def parse_docs(self, docs: List[str]) -> Dict[str, List[str]]:
-        """Split base64-encoded images and texts"""
+    def parse_docs(self, docs):
+        """
+        Separate base64-encoded images from text content.
+        
+        Args:
+            docs: List of retrieved documents
+            
+        Returns:
+            dict: Dictionary containing separated images and texts
+        """
         b64 = []
         text = []
         for doc in docs:
@@ -37,41 +68,103 @@ class Retriever(BaseComponent):
                 text.append(doc)
         return {"images": b64, "texts": text}
 
-    def build_prompt(self, context: Dict[str, List[str]], question: str) -> List[Dict[str, Any]]:
-        """Build a prompt with context and question"""
-    
+    def build_prompt(self, context, question):
+        """
+        Build a prompt combining context and question for the language model.
+        
+        Args:
+            context (dict): Dictionary containing text and image context
+            question (str): User's question
+            
+        Returns:
+            tuple: (prompt content, text context for user, image context for user)
+        """
         context_text = ""
+        context_text_for_user = []
+        context_image_for_user = []
+        
+        # Process text context
         if len(context["texts"]) > 0:
             for text_element in context["texts"]:
-                context_text += text_element
+                # Handle both Document and CompositeElement objects
+                if hasattr(text_element, 'page_content'):
+                    content = text_element.page_content
+                else:
+                    content = str(text_element)
+                context_text += content
+                context_text_for_user.append(content)
 
-        content = [{"type": "text", "text": user_query_prompt.format(context_text = context_text,question=question)}]
+        # Build base prompt with text context
+        content = [{
+            "type": "text",
+            "text": user_query_prompt.format(
+                context_text=context_text,
+                user_question=question
+            )
+        }]
 
-
+        # Add image context if available
         if len(context["images"]) > 0:
             for image in context["images"]:
-                content.append({"type": "image", "source": {"type": "base64", "media_type": "image/png",
-                                                            "data": image}})
+                context_image_for_user.append(image)
+                content.append({
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/png",
+                        "data": image
+                    }
+                })
 
-        return content
+        return content, context_text_for_user, context_image_for_user
 
-    def run(self, question: str) -> str:
-        """Run the retriever pipeline"""
+    def run(self, questions: list) -> str:
+        """
+        Execute the retrieval and response generation pipeline.
+        
+        This method:
+        1. Retrieves relevant documents for each question
+        2. Deduplicates the retrieved documents
+        3. Separates text and image content
+        4. Builds a prompt with the context
+        5. Generates a response using the language model
+        
+        Args:
+            questions (list): List of questions to process
+            
+        Returns:
+            tuple: (generated response, retrieved text context, retrieved image context)
+        """
         response = ''
+        fetched_context_text = []
+        fetched_context_image = []
+        docs = []
+        unique_docs = []
+        seen_doc = set()
+        
         try:
-            # retrievering the context based on the question 
-            docs = self.retriever.invoke(question)
-            self.logger.info(f'{docs=}')
-            # Parse documents into images and text
-            parsed_docs = self.parse_docs(docs)
-            self.logger.info(f'{parsed_docs=}')
-            # Build the prompt with context
-            prompt = self.build_prompt(parsed_docs, question)
+            # Retrieve context for each question
+            for question in questions:
+                docs.extend(self.retriever.invoke(question))
+            
+            # Deduplicate and process retrieved documents
+            for doc in docs:
+                if doc.metadata['doc_id'] not in seen_doc:
+                    seen_doc.add(doc.metadata['doc_id'])
+                    unique_docs.append(doc.metadata['original_doc'])
+
+            
+            self.logger.info(f'number of docs fetched in total = {len(docs)}========== number of unique docs = {len(unique_docs)}')
+            
+ 
+            parsed_docs = self.parse_docs(unique_docs)
+            
+            # Build prompt and get response
+            prompt, fetched_context_text, fetched_context_image = self.build_prompt(parsed_docs, question)
             self.logger.info(f'{prompt=}')
             
-            # Get response from the model
             response = self.model.run(prompt)
         except Exception as e:
-            print(e)
-            print(e.with_traceback)
-        return response
+            traceback.print_exc()
+            
+        return response, fetched_context_text, fetched_context_image

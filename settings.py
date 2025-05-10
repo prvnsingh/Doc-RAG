@@ -1,10 +1,31 @@
+"""
+Configuration settings for the Multi-Modal RAG Application.
+This module defines all application-wide settings and configurations using Pydantic for type safety.
+"""
+
 from pydantic_settings import BaseSettings
 from app.config import config
 
 
 class Settings(BaseSettings):
     """
-    Application settings
+    Application settings and configuration parameters.
+    
+    This class defines all configurable parameters for the application using Pydantic's
+    BaseSettings for automatic environment variable loading and type validation.
+    
+    Attributes:
+        app_name (str): Name of the application
+        app_description (str): Detailed description of the application's purpose
+        version (str): Current version of the application
+        debug (bool): Debug mode flag
+        port (int): Port number for the application server
+        host (str): Host address for the application server
+        admin_email (str): Administrator contact email
+        MODEL_ID_SONNET_3_7 (str): Anthropic Claude 3.7 Sonnet model identifier
+        ANTHROPIC_VERSION (str): Version of the Anthropic API being used
+        MAX_TOKENS (int): Maximum number of tokens for model responses
+        TEMP (float): Temperature parameter for model response generation
     """
     app_name: str = "Multi-Modal RAG Application"
     app_description: str = "This app is a QnA application what reads a pdf  and answer all your questions"
@@ -18,4 +39,5 @@ class Settings(BaseSettings):
     MAX_TOKENS: int = 20000
     TEMP: float = 0.5
 
+# Create a global settings instance
 settings = Settings()

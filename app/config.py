@@ -1,22 +1,60 @@
+"""
+Configuration management module for the Multi-Modal RAG system.
+This module handles loading and managing environment variables and application configuration.
+"""
+
 import os
 from dotenv import load_dotenv
 
 class Config:
+    """
+    Configuration manager class that loads and provides access to environment variables.
+    
+    This class is responsible for:
+    1. Loading environment variables from .env file
+    2. Providing default values for optional configurations
+    3. Offering a method to access configuration values by name
+    
+    Attributes:
+        AWS_ACCESS_KEY_ID (str): AWS access key for authentication
+        AWS_SECRET_ACCESS_KEY (str): AWS secret key for authentication
+        AWS_REGION (str): AWS region for service deployment
+        IS_LOCAL (str): Flag indicating if running in local environment
+        APP_VERSION (str): Current version of the application
+        OCR_AGENT (str): OCR engine to use (default: pytesseract)
+        TESSERACT_LANGUAGE (str): Language for Tesseract OCR (default: eng)
+        UNSTRUCTURED_HI_RES_MODEL_NAME (str): Model name for high-resolution processing
+    """
+    
     def __init__(self):
+        """Initialize configuration by loading environment variables."""
         load_dotenv()
-        #properties with default values
+        # Load required AWS credentials
         self.AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
         self.AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
         self.AWS_REGION = os.getenv('AWS_REGION')
+        
+        # Application settings with default values
         self.IS_LOCAL = os.getenv('IS_LOCAL', "False")
         self.APP_VERSION = os.getenv('APP_VERSION', '0.0.0')
-        self.OCR_AGENT=os.getenv('OCR_AGENT',"pytesseract")
-        self.TESSERACT_LANGUAGE=os.getenv('TESSERACT_LANGUAGE','eng')
-        self.UNSTRUCTURED_HI_RES_MODEL_NAME=os.getenv('UNSTRUCTURED_HI_RES_MODEL_NAME','yolox')
+        
+        # OCR and processing settings
+        self.OCR_AGENT = os.getenv('OCR_AGENT', "pytesseract")
+        self.TESSERACT_LANGUAGE = os.getenv('TESSERACT_LANGUAGE', 'eng')
+        self.UNSTRUCTURED_HI_RES_MODEL_NAME = os.getenv('UNSTRUCTURED_HI_RES_MODEL_NAME', 'yolox')
         # self.MLFLOW_TRACKING_URI = os.getenv('MLFLOW_TRACKING_URI')
 
     def get(self, tag):
-        # Use Python's built-in `getattr` to dynamically access attributes by name
+        """
+        Get a configuration value by its name.
+        
+        Args:
+            tag (str): Name of the configuration attribute to retrieve
+            
+        Returns:
+            The value of the requested configuration, or None if not found
+        """
         return getattr(self, tag, None)
 
+# Create a global configuration instance
 config = Config()

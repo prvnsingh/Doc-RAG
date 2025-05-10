@@ -1,34 +1,52 @@
+"""
+Vector embedding and storage service.
+This module provides functionality to create and store vector embeddings for text, tables, and images
+using AWS Bedrock embeddings and Chroma vector store.
+"""
+
 import uuid
 from typing import List
-import faiss
-import numpy as np
 from langchain_core.documents import Document
 from components.base_component import BaseComponent
-from langchain_community.docstore.in_memory import InMemoryDocstore
-from langchain_community.vectorstores import FAISS
+from langchain.storage import InMemoryStore
+from langchain_chroma import Chroma
 from langchain_aws import BedrockEmbeddings
+from langchain.retrievers.multi_vector import MultiVectorRetriever
 
 class Vectorizer(BaseComponent):
+    """
+    Vector embedding and storage manager for multi-modal content.
+    
+    This class handles the creation and storage of vector embeddings for different types of content:
+    - Text passages
+    - Tables
+    - Images
+    
+    It uses AWS Bedrock for embeddings and Chroma for vector storage, with an in-memory store
+    for the original content.
+    
+    Attributes:
+        embedding_function: AWS Bedrock embedding model
+        vector_store: Chroma vector store instance
+        id_key (str): Key used for document identification
+    """
 
     def __init__(self):
-        super().__init__('Vectorizer')
+        """Initialize the vectorizer with embedding model and storage components."""
+        super().__init__('VectorizerV2')
 
-        # 1) Embedding function
+        # Initialize AWS Bedrock embedding model
         self.embedding_function = BedrockEmbeddings(model_id="amazon.titan-embed-text-v2:0")
         
-        # 2) Manually construct an empty FAISS index
-        dimension = len(self.embedding_function.embed_query("hello world"))
-        index = faiss.IndexFlatL2(dimension)
-
-        self.vector_store = FAISS(
+        # Initialize Chroma vector store
+        self.vector_store = Chroma(
+            collection_name="MRAG_Mech_book",
             embedding_function=self.embedding_function,
-            index=index,
-            docstore=InMemoryDocstore(),
-            index_to_docstore_id={},
+            persist_directory="resources/chroma_langchain_db",  # Where to save data locally
         )
 
-        # 3) Parent docstore for the original texts/tables/images
         self.id_key = "doc_id"
+        self.original_doc = "original_doc"
 
 
     def run(
@@ -40,72 +58,50 @@ class Vectorizer(BaseComponent):
         table_summaries: List[str],
         image_summaries: List[str]
     ):
-        # — TEXTS —
-        if texts and text_summaries:
-            text_ids = [str(uuid.uuid4()) for _ in texts]
-            text_docs = [
-                Document(page_content=summary, metadata={self.id_key: tid})
-                for summary, tid in zip(text_summaries, text_ids)
+        """
+        Process and store vector embeddings for all content types.
+        
+        This method:
+        1. Creates unique IDs for each content item
+        2. Stores summaries in the vector store
+        3. Stores original content in the doc store
+        4. Links them using the unique IDs
+        5. Metadata stores the original document. 
+        A dedicated persistant store (docstore) should be used for production
+        
+        Args:
+            texts (List[str]): Original text content
+            tables (List[str]): Original table content
+            images (List[str]): Original image content
+            text_summaries (List[str]): Summaries of text content
+            table_summaries (List[str]): Summaries of table content
+            image_summaries (List[str]): Summaries of image content
+            
+        """
+        # Process text content and summaries
+        if text_summaries:
+            doc_ids = [str(uuid.uuid4()) for _ in texts]
+            summary_texts = [
+                Document(page_content=summary, metadata={self.id_key: doc_ids[i],self.original_doc: str(texts[i])}) 
+                for i, summary in enumerate(text_summaries)
             ]
-            # Safely add documents (only if there are any)
-            if text_docs:
-                self._safe_add_documents(text_docs)
-                # Save full parent texts
-                for tid, text in zip(text_ids, texts):
-                    self.vector_store.docstore.add({tid: text})
+            self.vector_store.add_documents(summary_texts)
 
-        # — TABLES —
-        if tables and table_summaries:
+        # Process table content and summaries
+        if table_summaries:
             table_ids = [str(uuid.uuid4()) for _ in tables]
-            table_docs = [
-                Document(page_content=summary, metadata={self.id_key: tid})
-                for summary, tid in zip(table_summaries, table_ids)
+            summary_tables = [
+                Document(page_content=summary, metadata={self.id_key: table_ids[i],self.original_doc: str(tables[i])}) 
+                for i, summary in enumerate(table_summaries)
             ]
-            # Safely add documents (only if there are any)
-            if table_docs:
-                self._safe_add_documents(table_docs)
-                # Save full parent tables
-                for tid, table in zip(table_ids, tables):
-                    self.vector_store.docstore.add({tid: table})
+            self.vector_store.add_documents(summary_tables)
 
-        # — IMAGES —
-        if images and image_summaries:
+        # Process image content and summaries
+        if image_summaries:
             img_ids = [str(uuid.uuid4()) for _ in images]
-            img_docs = [
-                Document(page_content=summary, metadata={self.id_key: iid})
-                for summary, iid in zip(image_summaries, img_ids)
+            summary_img = [
+                Document(page_content=summary, metadata={self.id_key: img_ids[i],self.original_doc: str(images[i])}) 
+                for i, summary in enumerate(image_summaries)
             ]
-            # Safely add documents (only if there are any)
-            if img_docs:
-                self._safe_add_documents(img_docs)
-                # Save full parent images
-                for iid, image in zip(img_ids, images):
-                    self.vector_store.docstore.add({iid: image})
+            self.vector_store.add_documents(summary_img)
 
-        # 5) Persist FAISS index
-        self.vector_store.save_local("resources/faiss_index")
-        
-    def _safe_add_documents(self, docs):
-        """Safely add documents to FAISS by directly handling embeddings."""
-        if not docs:
-            return
-            
-        # Get embeddings directly
-        embeddings = self.embedding_function.embed_documents([doc.page_content for doc in docs])
-        
-        # Ensure embeddings are in the right format for FAISS (2D array)
-        if embeddings:
-            embeddings_array = np.array(embeddings, dtype=np.float32)
-            # Reshape if needed - FAISS expects a 2D array (n_vectors x dimension)
-            if len(embeddings_array.shape) == 1:
-                # If we have a single vector, reshape to a 2D array with one row
-                dimension = embeddings_array.shape[0]
-                embeddings_array = embeddings_array.reshape(1, dimension)
-                
-            # Add embeddings to the index
-            self.vector_store.index.add(embeddings_array)
-            
-            # Add document mapping
-            for i, doc in enumerate(docs):
-                idx = self.vector_store.index.ntotal - len(docs) + i
-                self.vector_store.index_to_docstore_id[idx] = doc.metadata[self.id_key]

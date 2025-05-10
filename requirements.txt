@@ -108,7 +108,7 @@ mypy-extensions==1.1.0
 nest-asyncio==1.6.0
 networkx==3.4.2
 nltk==3.9.1
-numpy==2.2.5
+numpy
 nvidia-cublas-cu12==12.6.4.1
 nvidia-cuda-cupti-cu12==12.6.80
 nvidia-cuda-nvrtc-cu12==12.6.77
