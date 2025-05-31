@@ -60,14 +60,17 @@ class Summarizer(BaseComponent):
         3. Generating detailed descriptions of images using a specialized image prompt
         """
         # Summarize text chunks
-        for text in self.texts:
-            content = [{"type": "text", "text": summary_prompt_text.format(element=text)}]
-            self.text_summaries.append(self.model.run(content))
+        # for text in self.texts:
+        #     content = [{"type": "text", "text": summary_prompt_text.format(element=text)}]
+        #     self.text_summaries.append(self.model.run(content))
+
+        # for text we are not summarizing, since we don't want to lose any important information
+        self.text_summaries = self.texts
 
         # Summarize tables (converted to HTML)
         for table in self.tables:
-            content = [{"type": "text", "text": summary_prompt_text.format(element=table.metadata.text_as_html)}]
-            self.table_summaries.append(self.model.run(content))
+            content = [{"type": "text", "text": summary_prompt_text.format(element=table['text'])}]
+            self.table_summaries.append({"text": self.model.run(content), "metadata": table['metadata']})
 
         # Generate image descriptions
         for image in self.images:
@@ -78,14 +81,15 @@ class Summarizer(BaseComponent):
                 "source": {
                     "type": "base64",
                     "media_type": "image/png",
-                    "data": image
+                    "data": image['image']
                 }
             }
             content.append(content_dict)
-            self.image_summaries.append(self.model.run(content))
+            self.image_summaries.append(
+                {"text": self.model.run(content), "metadata": image['metadata'], "image": image['image']})
 
+        data = self.text_summaries + self.table_summaries + self.image_summaries
         # Log summary generation results
-        self.logger.info(f'''summaries    text_summaries: {self.text_summaries}
-                                            table_summaries: {self.table_summaries}
-                                            image_summaries: {self.image_summaries}''')
-                
+
+        self.logger.info(f'''summaries    {len(data)}''')
+        return data

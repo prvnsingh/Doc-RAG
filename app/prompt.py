@@ -18,35 +18,25 @@ Table or text chunk: {element}
 
 # Prompt template for describing images
 summary_prompt_image = """
-Describe the image in detail. For context, the images are extracted from a book of Mechanical Engineering
-"""
-
-# Prompt template for the retriever component
-retriever_prompt = """
+Describe the image in detail.
 """
 
 # Prompt template for answering user questions based on retrieved context
 user_query_prompt = """
-Answer the question based only on the following context, which can include text, tables, and the below image.
-Context: {context_text}
+You are a helpful assistant. Provide a JSON Answer for question based on the provided context.
+Do not rely on the internal memory or internal knowledge.
+Determine if the question is relevant to the context. 
+If yes, answer the question using the context provided and return status = 1 with answer. 
+If no, return status = 0 and answer something like this:
+\"I\'m sorry, I don't have enough information to answer that.\"
+
+Context: {context_text} 
 Question: {user_question}
-"""
 
-# Prompt template for decomposing complex questions into simpler sub-questions
-query_decomposer_prompt = """
-You are a helpful assistant designed to improve information retrieval. 
+Respond in this JSON format:
+{{\"status\":...,\"answer\":\"...\"}}
 
-Your task is to decompose a complex or multi-part question into simpler, atomic sub-questions that can be answered individually.
-
-Make sure each sub-question:
-- Targets a single fact or concept.
-- Preserves the intent and context of the original query.
-- Can be used independently to search for relevant documents.
-
-Original Query:
-"{query}"
-
-Sub-questions:
+Only provide the JSON.
 """
 
 # Prompt template for query expansion and decomposition
@@ -68,4 +58,4 @@ Original Query:
 Generated queries: []
 
 Generate only a python list containing 5-6 queries, NO OTHER TEXT.
-""" 
+"""

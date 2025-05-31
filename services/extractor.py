@@ -8,6 +8,7 @@ from components.base_component import BaseComponent
 from unstructured.partition.pdf import partition_pdf
 from .image_processing import filter_non_blank_images
 
+
 class Extractor(BaseComponent):
     """
     PDF content extractor that processes PDF files to extract text, tables, and images.
@@ -24,7 +25,7 @@ class Extractor(BaseComponent):
         tables (list): List of extracted tables
         images_b64 (list): List of base64-encoded images
     """
-    
+
     def __init__(self):
         """Initialize the extractor with empty content lists."""
         super().__init__('Extractor')
@@ -53,42 +54,46 @@ class Extractor(BaseComponent):
         # Partition PDF with high-resolution processing
         chunks = partition_pdf(
             file=pdf_data,
-            strategy="hi_res",                     # mandatory to infer tables
+            strategy="hi_res",  # mandatory to infer tables
             extract_images_in_pdf=True,
-            infer_table_structure=True,            # extract tables
-            extract_image_block_types=['Table','Figure','Equation'],
+            infer_table_structure=True,  # extract tables
+            extract_image_block_types=['Table', 'Figure'],
             include_page_breaks=True,
             unique_element_ids=True,
             hi_res_model_name='yolox',
-            image_output_dir_path=output_dir,      # if None, images and tables will saved in base64
-            extract_image_block_to_payload=True,   # if true, will extract base64 for API usage
-            chunking_strategy="basic",             # or 'basic'
-            max_characters=5000,                   # defaults to 500
-            combine_text_under_n_chars=1000,       # defaults to 0
-            new_after_n_chars=3000,
+            image_output_dir_path=output_dir,  # if None, images and tables will saved in base64
+            extract_image_block_to_payload=True,  # if true, will extract base64 for API usage
+            chunking_strategy="by_title",  # or 'basic'
+            max_characters=10000,  # defaults to 500
+            combine_text_under_n_chars=2000,  # defaults to 0 if chunks substantially smaller than desired combine
+            new_after_n_chars=6000,
+            chunk_overlap=100,
         )
-        
+
         # Process extracted chunks
         for chunk in chunks:
-            self.logger.info(f'\n{chunk}\n')
+            chunk_dic = chunk.to_dict()
+            self.logger.info(f'\n{chunk_dic.items()}\n')
             # Extract tables
-            if 'Table' or 'TableChunk' in str(type(chunk)):
-                self.tables.append(chunk)
+            if 'Table' in str(type(chunk)) or 'TableChunk' in str(type(chunk)):
+                self.tables.append({"text": chunk.metadata.text_as_html, "metadata": chunk_dic['metadata']})
 
             # Extract text
             if 'CompositeElement' in str(type(chunk)):
-                self.texts.append(chunk)
-            
+                self.texts.append({"text": chunk_dic['text'], "metadata": chunk_dic['metadata']})
+
             # Extract images
             if 'CompositeElement' in str(type(chunk)):
                 chunk_els = chunk.metadata.orig_elements
                 for el in chunk_els:
                     if "Image" in str(type(el)):
-                        self.images_b64.append(el.metadata.image_base64)
+                        self.images_b64.append({"image": el.metadata.image_base64, "metadata": chunk_dic['metadata']})
 
         # Log extraction results
-        self.logger.info(f'Extracted texts = {len(self.texts)} tables= {len(self.tables)} images = {len(self.images_b64)}')
+        self.logger.info(
+            f'Extracted texts = {len(self.texts)} tables= {len(self.tables)} images = {len(self.images_b64)}')
 
         # Filter out blank images
-        self.images_b64 = filter_non_blank_images(self.images_b64)
-        self.logger.info(f'Extracted texts = {len(self.texts)} tables= {len(self.tables)} images = {len(self.images_b64)}')
+        # self.images_b64 = filter_non_blank_images(self.images_b64)
+        self.logger.info(
+            f'Extracted texts = {len(self.texts)} tables= {len(self.tables)} images = {len(self.images_b64)}')

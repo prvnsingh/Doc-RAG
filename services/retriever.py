@@ -3,68 +3,59 @@ Content retrieval service for the Multi-Modal RAG system.
 This module provides functionality to retrieve relevant content (text and images) based on user queries
 and generate responses using a language model.
 """
+import json
+import weaviate
 from settings import settings
 from components.base_component import BaseComponent
 from .bedrock import MLLM
 from base64 import b64decode
-from typing import List, Dict, Any
+import weaviate.classes.query as wq
 from app.prompt import user_query_prompt
-from langchain_chroma import Chroma
-from langchain_aws import BedrockEmbeddings
 import traceback
+from app.config import config
+from services.document_store import DocumentStore
 
 
 class Retriever(BaseComponent):
-    """
-    Content retriever that fetches relevant information based on user queries.
-    
-    This class handles:
-    1. Retrieving relevant content from the vector store
-    2. Processing and deduplicating retrieved documents
-    3. Building prompts with context for the language model
-    4. Generating responses using the language model
-    
-    Attributes:
-        vector_db: Chroma vector database instance
-        model: Language model instance for generating responses
-        retriever: Multi-vector retriever for fetching content
-    """
 
     def __init__(self):
         """
         Initialize the retriever with necessary components.
         """
         super().__init__('Retriever')
-        embeddings = BedrockEmbeddings(model_id=settings.embedding_model)
-        self.vector_db = Chroma(
-            collection_name="MRAG_Mech_book",
-            persist_directory=settings.persist_directory,
-            embedding_function=embeddings
-        )
+        self.headers = {
+            "X-AWS-Access-Key": config.AWS_ACCESS_KEY_ID,
+            "X-AWS-Secret-Key": config.AWS_SECRET_ACCESS_KEY,
+        }
         self.model = MLLM()
-        self.retriever = self.vector_db.as_retriever()
 
-    def parse_docs(self, docs):
+    def parse_docs(self, docs, metadatas):
         """
         Separate base64-encoded images from text content.
-        
+
         Args:
             docs: List of retrieved documents
-            
+
         Returns:
             dict: Dictionary containing separated images and texts
+
+        Parameters
+        ----------
+
+        metadatas
         """
         b64 = []
-        text = []
-        for doc in docs:
-            try:
-                b64decode(doc)
-                b64.append(doc)
-            except Exception:
-                text.append(doc)
-        return {"images": b64, "texts": text}
+        # text = []
+        for metadata in metadatas:
+            if 'image' in metadata['metadata'].keys():
+                try:
+                    b64decode(metadata['metadata']['image'])
+                    b64.append(metadata['metadata']['image'])
+                except Exception:
+                    print("got error")
+        return {"images": b64, "texts": docs}
 
-    def build_prompt(self, context, question):
+    def build_prompt(self, text_context, image_context, question):
         """
         Build a prompt combining context and question for the language model.
         
@@ -74,21 +65,24 @@ class Retriever(BaseComponent):
             
         Returns:
             tuple: (prompt content, text context for user, image context for user)
+
+        Parameters
+        ----------
+        text_context
+        image_context
         """
         context_text = ""
-        context_text_for_user = []
-        context_image_for_user = []
-        
+
+
         # Process text context
-        if len(context["texts"]) > 0:
-            for text_element in context["texts"]:
+        if len(text_context) > 0:
+            for text_element in text_context:
                 # Handle both Document and CompositeElement objects
                 if hasattr(text_element, 'page_content'):
                     content = text_element.page_content
                 else:
                     content = str(text_element)
                 context_text += content
-                context_text_for_user.append(content)
 
         # Build base prompt with text context
         content = [{
@@ -100,9 +94,8 @@ class Retriever(BaseComponent):
         }]
 
         # Add image context if available
-        if len(context["images"]) > 0:
-            for image in context["images"]:
-                context_image_for_user.append(image)
+        if len(image_context) > 0:
+            for image in image_context:
                 content.append({
                     "type": "image",
                     "source": {
@@ -112,7 +105,7 @@ class Retriever(BaseComponent):
                     }
                 })
 
-        return content, context_text_for_user, context_image_for_user
+        return content
 
     def run(self, questions: list) -> str:
         """
@@ -131,40 +124,59 @@ class Retriever(BaseComponent):
         Returns:
             tuple: (generated response, retrieved text context, retrieved image context)
         """
-        response = ''
-        fetched_context_text = []
-        fetched_context_image = []
-        docs = []
-        unique_docs = []
-        seen_doc = set()
-        
-        try:
-            # Retrieve context for each question
-            for question in questions:
-                docs.extend(self.retriever.invoke(question))
-            
-            # Deduplicate and process retrieved documents
-            for doc in docs:
-                self.logger.info(str(type(doc)))
-                self.logger.info(doc)
-                if doc.metadata['doc_id'] not in seen_doc:
-                    self.logger.info(doc.metadata['doc_id'])
-                    self.logger.info(doc.metadata['original_doc'])
-                    seen_doc.add(doc.metadata['doc_id'])
-                    unique_docs.append(doc.metadata['original_doc'])
+        llm_response = {'answer':""}
+        reference_docs = {}
+        image_context = []
+        text_context = []
+        user_references = []
+        with weaviate.connect_to_local(host="localhost", port=8080, grpc_port=50051, headers=self.headers) as client:
+            collection = client.collections.get("DocumentCollection")
+            try:
+                # Retrieve context for each question
+                for question in questions:
+                    response = collection.query.hybrid(
+                        query=question,  # The model provider integration will automatically vectorize the query
+                        limit=2,
+                        return_metadata=wq.MetadataQuery(score=True)
+                    )
+                    for obj in response.objects:
+                        if obj.uuid not in reference_docs.keys():
+                            reference_docs[str(obj.uuid)] = {"text": obj.properties["text"],
+                                                             "score": f"{obj.metadata.score:.3f}"}
 
-            
-            self.logger.info(f'number of docs fetched in total = {len(docs)}========== number of unique docs = {len(unique_docs)}')
-            
- 
-            parsed_docs = self.parse_docs(unique_docs)
-            
-            # Build prompt and get response
-            prompt, fetched_context_text, fetched_context_image = self.build_prompt(parsed_docs, question)
-            self.logger.info(f'{prompt=}')
-            
-            response = self.model.run(prompt)
-        except Exception as e:
-            traceback.print_exc()
-            
-        return response, fetched_context_text, fetched_context_image
+                with DocumentStore(config.MONGO_URI) as doc_store:
+                    for uuid, reference in reference_docs.items():
+                        metadata_doc = doc_store.get_metadata(uuid)
+                        ref_page_no = 0
+                        if 'image' in metadata_doc['metadata'].keys():
+                            try:
+                                b64decode(metadata_doc['metadata']['image'])
+                                image_context.append(metadata_doc['metadata']['image'])
+                                ref_page_no = metadata_doc['metadata']['metadata']['page_number']
+                            except Exception as e:
+                                self.logger.info(traceback.print_exc())
+                        else:
+                            text_context.append(reference['text'])
+                            ref_page_no = metadata_doc['metadata']['page_number']
+
+                        user_reference = {"page_no": ref_page_no, "text": reference['text'],"score": reference['score']}
+                        user_references.append(user_reference)
+
+                self.logger.info(f"user reference ====== {user_references}")
+
+                # Build prompt and get response
+                prompt = self.build_prompt(text_context, image_context, question)
+                self.logger.info(f'{prompt=}')
+
+                response = self.model.run(prompt)
+                self.logger.info(f'{response}')
+                llm_response = json.loads(response)
+                # if the question is irrelevant or off-topic
+                if llm_response['status'] == 0:
+                    user_references = []
+                    image_context = []
+
+            except Exception as e:
+                self.logger.info(traceback.print_exc())
+
+            return llm_response['answer'], user_references, image_context

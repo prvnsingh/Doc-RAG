@@ -107,6 +107,7 @@ class MLLM(BaseComponent):
                 modelId=self.model_id
             )
             llm_response = json.loads(response.get("body").read())['content'][0]['text']
+
         except Exception as e:
             self.logger.info(f"An error occurred while fetching the response from the llm")
 
