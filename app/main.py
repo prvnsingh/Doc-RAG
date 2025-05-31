@@ -7,7 +7,7 @@ from settings import settings
 import uvicorn
 from fastapi import FastAPI, UploadFile, File
 from services.extractor import Extractor
-from services.vectorizer import Vectorizer
+from services.vectorDB import VectorDB
 from services.summarizer import Summarizer
 from services.retriever import Retriever
 from services.query_dcomposer import Query_decomposer
@@ -21,6 +21,7 @@ app = FastAPI(
     # lifespan=lifespan,
 )
 
+
 @app.get("/health")
 def health_check():
     """
@@ -31,7 +32,9 @@ def health_check():
     """
     return {"status": "healthy"}
 
+
 global vector_retriever
+
 
 @app.post("/upload_file_for_embedding")
 def embedding_file(file: UploadFile = File(...)):
@@ -53,18 +56,17 @@ def embedding_file(file: UploadFile = File(...)):
     file_content = file.file
     extractor = Extractor()
     extractor.run(file_content)
-    summarizer = Summarizer(extractor.texts,extractor.tables,extractor.images_b64)
-    summarizer.run()
-    vectorizer = Vectorizer()
-    vectorizer.run(summarizer.texts,summarizer.tables,summarizer.images,
-                       summarizer.text_summaries,summarizer.table_summaries,summarizer.image_summaries)
+    summarizer = Summarizer(extractor.texts, extractor.tables, extractor.images_b64)
+    data = summarizer.run()
+    vectorizer = VectorDB()
+    vectorizer.run(data)
     et = time.time()
-    print(f'time taken {et-st}')
+    print(f'time taken {et - st}')
     return {"status": "success"}
 
 
 @app.get("/ask_question")
-def query_from_user(question:str):
+def query_from_user(question: str):
     """
     Process a user question and return an answer with relevant context.
     
@@ -84,8 +86,9 @@ def query_from_user(question:str):
         "context_images": fetch_context_image
     }
 
+
 @app.get("/query_decompose")
-def query_from_user(question:str):
+def query_from_user(question: str):
     """
     Decompose a complex question into simpler sub-queries.
     
@@ -116,7 +119,6 @@ def embedding_file(file: UploadFile = File(...)):
     extractor = Extractor()
     extractor.run(file_content)
 
+
 if __name__ == '__main__':
     uvicorn.run(app, port=settings.port, host=settings.host)
-
-

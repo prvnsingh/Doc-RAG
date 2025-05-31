@@ -1,0 +1,7 @@
+__pycache__/
+logs.txt
+uv.lock
+pyproject.toml
+.python-version
+.idea/
+.env

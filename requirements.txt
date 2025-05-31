@@ -19,3 +19,5 @@ langchain_aws
 langchain-chroma
 chromadb>=0.6.3
 streamlit
+weaviate-client
+pymongo
