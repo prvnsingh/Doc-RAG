@@ -103,7 +103,7 @@ class Retriever(BaseComponent):
         image_context = []
         text_context = []
         user_references = []
-        with weaviate.connect_to_local(host=config.WEAVIATE_HOST, headers=self.headers) as client:
+        with weaviate.connect_to_local(host=config.WEAVIATE_HOST, port=8080, grpc_port=50051, headers=self.headers) as client:
             collection = client.collections.get("DocumentCollection")
             try:
                 # Retrieve context for each question
