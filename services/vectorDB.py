@@ -1,6 +1,5 @@
 from weaviate.classes.config import Configure
 import weaviate
-from weaviate.classes.config import Property, DataType
 from app.config import config
 from components.base_component import BaseComponent
 from services.document_store import DocumentStore
@@ -17,7 +16,7 @@ class VectorDB(BaseComponent):
         self.doc_store = {}
 
     def run(self, data):
-        with weaviate.connect_to_local(host="localhost", port=8080, grpc_port=50051, headers=self.headers) as client:
+        with weaviate.connect_to_local(host="http://weaviate:8080", headers=self.headers) as client:
             self.logger.info(client.is_ready())
             # Check if class already exists
             existing_collections = client.collections.list_all()
