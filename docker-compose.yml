@@ -1,26 +1,41 @@
----
+version: "3.9"
+
 services:
-  weaviate:
-    command:
-    - --host
-    - 0.0.0.0
-    - --port
-    - '8080'
-    - --scheme
-    - http
-    image: cr.weaviate.io/semitechnologies/weaviate:1.30.6
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
     ports:
-    - 8080:8080
-    - 50051:50051
+      - "8000:8000"  # FastAPI
+      - "8501:8501"  # Streamlit
+    depends_on:
+      - weaviate
+    env_file:
+      - .env  
+    environment:
+      - PYTHONUNBUFFERED=1
+
+  weaviate:
+    image: cr.weaviate.io/semitechnologies/weaviate:1.30.6
+    command:
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --scheme
+      - http
+    ports:
+      - "8080:8080"
+      - "50051:50051"
     volumes:
-    - weaviate_data:/var/lib/weaviate
+      - weaviate_data:/var/lib/weaviate
     restart: on-failure:0
     environment:
       QUERY_DEFAULTS_LIMIT: 25
-      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
-      PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
-      ENABLE_API_BASED_MODULES: 'true'
-      CLUSTER_HOSTNAME: 'node1'
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
+      PERSISTENCE_DATA_PATH: "/var/lib/weaviate"
+      ENABLE_API_BASED_MODULES: "true"
+      CLUSTER_HOSTNAME: "node1"
+
 volumes:
   weaviate_data:
-...

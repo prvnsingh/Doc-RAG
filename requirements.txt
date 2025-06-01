@@ -7,17 +7,10 @@ pdfminer.six
 pi_heif
 unstructured_inference
 pdf2image
-langchain
-langchain-community
-langchain_core
-langchain-openai
 boto3
 pytesseract
 unstructured-pytesseract
 unstructured[all-docs]
-langchain_aws
-langchain-chroma
-chromadb>=0.6.3
 streamlit
 weaviate-client
 pymongo

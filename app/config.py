@@ -42,7 +42,8 @@ class Config:
         self.OCR_AGENT = os.getenv('OCR_AGENT', "pytesseract")
         self.TESSERACT_LANGUAGE = os.getenv('TESSERACT_LANGUAGE', 'eng')
         self.UNSTRUCTURED_HI_RES_MODEL_NAME = os.getenv('UNSTRUCTURED_HI_RES_MODEL_NAME', 'yolox')
-        self.MONGO_URI = os.getenv('MONGO_URI')
+        self.MONGO_URI = os.getenv('MONGO_URI'),
+        self.WEAVIATE_HOST = os.getenv("WEAVIATE_HOST", "http://localhost:8080")
         
         # self.MLFLOW_TRACKING_URI = os.getenv('MLFLOW_TRACKING_URI')
 
