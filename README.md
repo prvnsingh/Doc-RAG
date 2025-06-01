@@ -1,8 +1,8 @@
-# MRAG - Multimodal RAG PDF Question Answering
+# Doc-RAG - Multimodal RAG PDF Question Answering
 
 ## Overview
 
-MRAG (Multimodal Retrieval-Augmented Generation) is a powerful tool that enables users to upload any PDF document (books, user manuals, reports) and ask questions about its content. The system leverages multimodal processing to understand both text and visual elements within the document, providing comprehensive answers based on the entire context.
+Doc- RAG (Document based Retrieval-Augmented Generation) is a powerful tool that enables users to upload any PDF document (books, user manuals, reports) and ask questions about its content. The system leverages multimodal processing to understand both text and visual elements within the document, providing comprehensive answers based on the entire context.
 
 ## Key Features
 
