@@ -42,20 +42,19 @@ MRAG uses a "Summarization and Descriptive Embedding" approach where:
   - MongoDB: For Document and metadata storage
 
 ## Installation
-
-To run the application as one docker container create 
+-- One way to run the application as a single docker container create 
 a environment file (.env) containing all the environment variables as shown in .env.example file.
 ```bash
-git clone https://github.com/prvnsingh/mrag.git
+git clone https://github.com/prvnsingh/Doc-RAG.git
 docker compose up --build
 
 ```
 
-To run the application by setting up individual components: backend, frontend and vector DB, follow the below commands
+-- Another way is to run the application by setting up individual components: backend, frontend and vector DB, follow the below commands
 
 ```bash
 # Clone the repository
-git clone https://github.com/prvnsingh/mrag.git
+git clone https://github.com/prvnsingh/Doc-RAG.git
 cd mrag
 
 # Create and activate a virtual environment (optional but recommended)
