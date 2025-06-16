@@ -25,7 +25,7 @@ class Settings(BaseSettings):
         MODEL_ID_SONNET_3_7 (str): Anthropic Claude 3.7 Sonnet model identifier
         ANTHROPIC_VERSION (str): Version of the Anthropic API being used
         MAX_TOKENS (int): Maximum number of tokens for model responses
-        TEMP (float): Temperature parameter for model response generation
+        model_temp (float): Temperature parameter for model response generation
     """
     app_name: str = "Multi-Modal RAG Application"
     app_description: str = "This app is a QnA application what reads a pdf  and answer all your questions"
@@ -37,9 +37,10 @@ class Settings(BaseSettings):
     MODEL_ID_SONNET_3_7: str = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"  # Sonnet3.7 model
     ANTHROPIC_VERSION: str = "bedrock-2023-05-31"
     MAX_TOKENS: int = 20000
-    TEMP: float = 0.5
+    model_temp: float = 0.5
     persist_directory: str = "resources/chroma_langchain_db"
     embedding_model: str = "amazon.titan-embed-text-v2:0"
+    IS_LOCAL:bool = True
 
 # Create a global settings instance
 settings = Settings()

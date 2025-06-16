@@ -14,3 +14,9 @@ unstructured[all-docs]
 streamlit
 weaviate-client
 pymongo
+hf_xet
+nemoguardrails
+langchain-aws
+langchain
+anthropic
+langchain-nvidia-ai-endpoints

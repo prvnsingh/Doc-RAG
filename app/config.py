@@ -37,13 +37,9 @@ class Config:
         # Application settings with default values
         self.IS_LOCAL = os.getenv('IS_LOCAL', "False")
         self.APP_VERSION = os.getenv('APP_VERSION', '0.0.0')
-        
-        # OCR and processing settings
-        self.OCR_AGENT = os.getenv('OCR_AGENT', "pytesseract")
-        self.TESSERACT_LANGUAGE = os.getenv('TESSERACT_LANGUAGE', 'eng')
-        self.UNSTRUCTURED_HI_RES_MODEL_NAME = os.getenv('UNSTRUCTURED_HI_RES_MODEL_NAME', 'yolox')
         self.MONGO_URI = os.getenv('MONGO_URI'),
-        self.WEAVIATE_HOST = os.getenv("WEAVIATE_HOST", "http://localhost:8080")
+        self.NVIDIA_API_KEY = os.getenv('NVIDIA_API_KEY'),
+        self.WEAVIATE_HOST = os.getenv("WEAVIATE_HOST", "localhost")
         
         # self.MLFLOW_TRACKING_URI = os.getenv('MLFLOW_TRACKING_URI')
 

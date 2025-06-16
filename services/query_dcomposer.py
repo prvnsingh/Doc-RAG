@@ -9,6 +9,8 @@ from components.base_component import BaseComponent
 from app.prompt import query_expansion_prompt
 import ast
 
+from .guardrails import GuardrailsService
+
 
 class Query_decomposer(BaseComponent):
     """
@@ -28,6 +30,7 @@ class Query_decomposer(BaseComponent):
         """Initialize the query decomposer with empty query storage."""
         super().__init__(logger_name='Query_decomposer')
         self.queries = ""
+        self.rails = GuardrailsService()
         self.model = MLLM()
 
     def run(self, query):
@@ -52,10 +55,15 @@ class Query_decomposer(BaseComponent):
         """
         # Generate expanded queries using the language model
         content = [{"type": "text", "text": query_expansion_prompt.format(query=query)}]
-        self.queries = self.model.run(content)
-        
+
+        self.queries = self.rails.run(content)
+
         # Parse the response into a list of queries
-        expanded_queries = ast.literal_eval(self.queries)
+        try:
+            expanded_queries = ast.literal_eval(self.queries)
+        except Exception as e:
+            self.logger.error(f"Failed to parse queries: {self.queries}")
+            expanded_queries = [self.queries]
         self.logger.info(f'{expanded_queries}')
         
         return expanded_queries

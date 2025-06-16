@@ -78,7 +78,7 @@ cp .env.example .env
 # no need of WEAVIATE_HOST as we will spin it locally
 
 # Spin the docker image of Weaviate to setup local vectorDB
-docker-compose docker-compose-vector-db.yml up -d
+docker compose -f docker-compose-vector-db.yml up --build
 
 
 ```

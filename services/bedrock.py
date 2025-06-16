@@ -11,6 +11,7 @@ from settings import settings
 from app.config import config
 import json
 from enum import Enum
+from services.guardrails import GuardrailsService
 
 # Define timeout settings for AWS API calls (15 minutes)
 TIMEOUT = 900
@@ -63,7 +64,7 @@ class MLLM(BaseComponent):
 
     def run(self, data):
         """
-        Generate a response using the language model.
+        Generate a response using the language model with content safety checks.
         
         This method:
         1. Formats the input data into a message
@@ -95,7 +96,7 @@ class MLLM(BaseComponent):
         # Prepare the request payload
         payload = json.dumps({
             "max_tokens": settings.MAX_TOKENS,
-            'temperature': settings.TEMP,
+            'temperature': settings.model_temp,
             "anthropic_version": settings.ANTHROPIC_VERSION,
             "messages": message_list
         })

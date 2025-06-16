@@ -1,157 +1,169 @@
 """
-Content retrieval service for the Multi-Modal RAG system.
-This module provides functionality to retrieve relevant content (text and images) based on user queries
-and generate responses using a language model.
+Content‑retrieval service for the Multi‑Modal RAG system.
+Now chat‑aware: keeps conversation history per session_id.
 """
-import json
-import weaviate
-from components.base_component import BaseComponent
-from .bedrock import MLLM
+
+import json, traceback, datetime
 from base64 import b64decode
+from typing import List, Tuple
+
+import weaviate
 import weaviate.classes.query as wq
+from components.base_component import BaseComponent
+from services.bedrock import MLLM
 from app.prompt import user_query_prompt
-import traceback
-from app.config import config
-from services.document_store import DocumentStore
+from services.guardrails import GuardrailsService
 
 
-def build_prompt(text_context, image_context, question):
+#  Helpers
+def build_prompt(
+    chat_history: str,
+    text_context: List[str],
+    image_context: List[str],
+    question: str,
+) -> list:
     """
-    Build a prompt combining context and question for the language model.
+    Compose the multimodal prompt for the LLM.
 
-    Args:
-        context (dict): Dictionary containing text and image context
-        question (str): User's question
-
-    Returns:
-        str: formated prompt given to the model
-
-    Parameters
-    ----------
-    question
-    text_context
-    image_context
+    chat_history –string containing previous turns
+    text_context –list of paragraphs retrieved from Weaviate
+    image_context –list of base‑64 PNG strings
+    question –current user question
     """
-    context_text = ""
+    # prepend conversation memory
+    prompt_text = f"Conversation so far:\n{chat_history}\n\n"
 
-    # Process text context
-    if len(text_context) > 0:
-        for text_element in text_context:
-            # Handle both Document and CompositeElement objects
-            if hasattr(text_element, 'page_content'):
-                content = text_element.page_content
-            else:
-                content = str(text_element)
-            context_text += content
+    #  add retrieved text context
+    if text_context:
+        prompt_text += "Document context:\n"
+        prompt_text += "\n".join(text_context)
 
-    # Build base prompt with text context
-    content = [{
-        "type": "text",
-        "text": user_query_prompt.format(
-            context_text=context_text,
-            user_question=question
-        )
-    }]
+    #  add the template with the current question
+    prompt = user_query_prompt.format(
+        context_text=prompt_text,  # already included above
+        user_question=question,
+    )
+    content = [{"type": "text", "text": prompt}]
 
-    # Add image context if available
-    if len(image_context) > 0:
-        for image in image_context:
-            content.append({
+    #  attach images
+    for img in image_context:
+        content.append(
+            {
                 "type": "image",
                 "source": {
                     "type": "base64",
                     "media_type": "image/png",
-                    "data": image
-                }
-            })
+                    "data": img,
+                },
+            }
+        )
 
     return content
 
 
+#  Retriever
+# noinspection PyPackageRequirements
 class Retriever(BaseComponent):
+    """
+    Chat‑aware Retriever that:
+      • pulls last N turns from MongoDB
+      • appends them to the prompt
+      • stores every new turn for future use
+    """
 
-    def __init__(self):
-        """
-        Initialize the retriever with necessary components.
-        """
-        super().__init__('Retriever')
-        self.headers = {
-            "X-AWS-Access-Key": config.AWS_ACCESS_KEY_ID,
-            "X-AWS-Secret-Key": config.AWS_SECRET_ACCESS_KEY,
-        }
+    def __init__(self,app, session_id: str, history_limit: int = 5):
+        super().__init__("Retriever")
+        self.app = app  # reference to the FastAPI app instance
+        self.session_id = session_id
+        self.history_limit = history_limit
+
+        # Bedrock LLM wrapper
         self.model = MLLM()
+        self.doc_store = self.app.state.doc_store  # MongoDB client
 
-    def run(self, questions: list) -> str:
+
+
+    def run(self, question : str, queries: List[str]):
         """
-        Execute the retrieval and response generation pipeline.
-        
-        This method:
-        1. Retrieves relevant documents for each question
-        2. Deduplicates the retrieved documents
-        3. Separates text and image content
-        4. Builds a prompt with the context
-        5. Generates a response using the language model
-        
-        Args:
-            questions (list): List of questions to process
-            
-        Returns:
-            tuple: (generated response, retrieved text context, retrieved image context)
+        • queries == list from Query_decomposer
+        • question == original user question (for history + prompt)
         """
-        llm_response = {'answer': ""}
-        reference_docs = {}
-        image_context = []
-        text_context = []
-        user_references = []
-        with weaviate.connect_to_local(host=config.WEAVIATE_HOST, port=8080, grpc_port=50051, headers=self.headers) as client:
+        image_context, text_context, user_refs = [], [], []
+        llm_response = {"status": 1, "answer": ""}
+
+        try:
+            client: weaviate.Client = self.app.state.vector_db.client
             collection = client.collections.get("DocumentCollection")
-            try:
-                # Retrieve context for each question
-                for question in questions:
-                    response = collection.query.hybrid(
-                        query=question,  # The model provider integration will automatically vectorize the query
-                        limit=2,
-                        return_metadata=wq.MetadataQuery(score=True)
-                    )
-                    for obj in response.objects:
-                        if obj.uuid not in reference_docs.keys():
-                            reference_docs[str(obj.uuid)] = {"text": obj.properties["text"],
-                                                             "score": f"{obj.metadata.score:.3f}"}
 
-                with DocumentStore(config.MONGO_URI) as doc_store:
-                    for uuid, reference in reference_docs.items():
-                        metadata_doc = doc_store.get_metadata(uuid)
-                        ref_page_no = 0
-                        if 'image' in metadata_doc['metadata'].keys():
-                            try:
-                                b64decode(metadata_doc['metadata']['image'])
-                                image_context.append(metadata_doc['metadata']['image'])
-                                ref_page_no = metadata_doc['metadata']['metadata']['page_number']
-                            except Exception as e:
-                                self.logger.info(traceback.print_exc())
-                        else:
-                            text_context.append(reference['text'])
-                            ref_page_no = metadata_doc['metadata']['page_number']
+            # hybrid search for every decomposed query
+            reference_docs = {}
+            for q in queries:
+                self.logger.info(f"Hybrid search for query: {q}")
+                res = collection.query.hybrid(
+                    query=q, limit=5, return_metadata=wq.MetadataQuery(score=True)
+                )
+                for obj in res.objects:
+                    score = float(f"{obj.metadata.score:.3f}")
+                    if score >= 0.7: # thresholding the score to 0.7 to find the most relevant documents
+                        # setdefault ensures unique UUIDs only once
+                        reference_docs.setdefault(
+                            obj.uuid,
+                            {
+                                "text": obj.properties["text"],
+                                "score": f"{score:.3f}",
+                            },
+                        )
+            #  ranking the  fetched context on the basis of the score
+            sorted_reference_docs = dict(
+                sorted(reference_docs.items(), key=lambda x: float(x[1]["score"]), reverse=True)
+            )
 
-                        user_reference = {"page_no": ref_page_no, "text": reference['text'],
-                                          "score": reference['score']}
-                        user_references.append(user_reference)
+            #  keep only the top 3 results
+            reference_docs = dict(list(sorted_reference_docs.items())[:3])
 
-                self.logger.info(f"user reference ====== {user_references}")
+            self.logger.info(f"Hybrid search results: {reference_docs}")
+            # fetch metadata / raw content from MongoDB
+            for uuid, ref in reference_docs.items():
+                meta = self.doc_store.get_metadata(str(uuid))
+                self.logger.info(f"Retrieved metadata for {uuid}: {meta}")
+                if "image" in meta["metadata"]:
+                    # it's an image
+                    try:
+                        b64decode(meta["metadata"]["image"])
+                        image_context.append(meta["metadata"]["image"])
+                    except Exception:
+                        self.logger.error("Bad image b64", exc_info=True)
+                    page = meta["metadata"]["metadata"]["page_number"]
+                else:
+                    # plain text
+                    text_context.append(ref["text"])
+                    page = meta["metadata"]["page_number"]
 
-                # Build prompt and get response
-                prompt = build_prompt(text_context, image_context, question)
-                self.logger.info(f'{prompt=}')
+                user_refs.append(
+                    {
+                        "page_no": page,
+                        "text": ref["text"],
+                        "score": ref["score"],
+                    }
+                )
 
-                response = self.model.run(prompt)
-                self.logger.info(f'{response}')
-                llm_response = json.loads(response)
-                # if the question is irrelevant or off-topic
-                if llm_response['status'] == 0:
-                    user_references = []
-                    image_context = []
+            # build prompt (includes chat history)
+            chat_history = self.doc_store.get_chat_history(self.session_id, self.history_limit)
+            prompt = build_prompt(chat_history, text_context, image_context, question)
+            self.logger.info(f"prompt={prompt}")
+            # hit the LLM
+            raw = self.model.run(prompt)
+            self.logger.info(f"raw response={raw}")
+            llm_response = json.loads(raw)
 
-            except Exception as e:
-                self.logger.info(traceback.print_exc())
+            #  storing the chat history
+            if llm_response["status"] == 1:
+                self.doc_store.store_chat(question, llm_response["answer"],self.session_id)
+            else:
+                # irrelevant: ignore refs/ctx
+                user_refs, image_context = [], []
 
-            return llm_response['answer'], user_references, image_context
+        except Exception:
+            self.logger.error("Retriever failure", exc_info=True)
+
+        return llm_response["answer"], user_refs, image_context

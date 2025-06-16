@@ -29,6 +29,7 @@ RUN pip install --upgrade pip setuptools wheel && \
 ARG APP_VERSION=0.0.0
 ENV APP_VERSION=$APP_VERSION
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONWARNINGS="ignore::DeprecationWarning"
 
 RUN chmod +x /src/start.sh
 CMD ["/src/start.sh"]

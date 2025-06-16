@@ -60,7 +60,7 @@ class Extractor(BaseComponent):
             extract_image_block_types=['Table', 'Figure'],
             include_page_breaks=True,
             unique_element_ids=True,
-            hi_res_model_name='yolox',
+            # hi_res_model_name='yolox',
             image_output_dir_path=output_dir,  # if None, images and tables will saved in base64
             extract_image_block_to_payload=True,  # if true, will extract base64 for API usage
             chunking_strategy="by_title",  # or 'basic'

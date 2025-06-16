@@ -1,0 +1,31 @@
+models:
+  - type: main
+    engine: bedrock
+    model: us.anthropic.claude-3-7-sonnet-20250219-v1:0
+    config:
+      temperature: 0.1
+      max_tokens: 20000
+      region_name: us-west-2
+  - type: content_safety
+    engine: bedrock
+    model: us.anthropic.claude-3-7-sonnet-20250219-v1:0
+    config:
+      temperature: 0.1
+      max_tokens: 20000
+      region_name: us-west-2
+
+rails:
+  input:
+    flows:
+      - content safety check input $model=content_safety
+
+
+
+  general:
+    config:
+      logging_level: INFO
+      error_handling: strict
+      fallback_responses:
+        - "I apologize, but I cannot process this request due to content safety concerns."
+        - "I'm unable to provide a response as it may contain inappropriate content."
+        - "This request cannot be processed as it violates our content safety guidelines."
