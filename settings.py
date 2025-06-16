@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     persist_directory: str = "resources/chroma_langchain_db"
     embedding_model: str = "amazon.titan-embed-text-v2:0"
     IS_LOCAL:bool = True
+    ranking_limit:int = 3
+    search_limit:int = 5
+    score_threshold: float = 0.7  # Threshold for document relevance scoring
 
 # Create a global settings instance
 settings = Settings()

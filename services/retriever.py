@@ -12,8 +12,7 @@ import weaviate.classes.query as wq
 from components.base_component import BaseComponent
 from services.bedrock import MLLM
 from app.prompt import user_query_prompt
-from services.guardrails import GuardrailsService
-
+from settings import settings
 
 #  Helpers
 def build_prompt(
@@ -100,11 +99,12 @@ class Retriever(BaseComponent):
             for q in queries:
                 self.logger.info(f"Hybrid search for query: {q}")
                 res = collection.query.hybrid(
-                    query=q, limit=5, return_metadata=wq.MetadataQuery(score=True)
+                    query=q, limit=settings.search_limit, return_metadata=wq.MetadataQuery(score=True)
                 )
                 for obj in res.objects:
                     score = float(f"{obj.metadata.score:.3f}")
-                    if score >= 0.7: # thresholding the score to 0.7 to find the most relevant documents
+                    # thresholding the score to 0.7 to find the most relevant documents
+                    if score >= settings.score_threshold:
                         # setdefault ensures unique UUIDs only once
                         reference_docs.setdefault(
                             obj.uuid,
@@ -119,7 +119,7 @@ class Retriever(BaseComponent):
             )
 
             #  keep only the top 3 results
-            reference_docs = dict(list(sorted_reference_docs.items())[:3])
+            reference_docs = dict(list(sorted_reference_docs.items())[:settings.ranking_limit])
 
             self.logger.info(f"Hybrid search results: {reference_docs}")
             # fetch metadata / raw content from MongoDB

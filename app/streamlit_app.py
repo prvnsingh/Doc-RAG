@@ -80,7 +80,9 @@ if question and st.button("Get Answer"):
                 st.subheader("Relevant Context:")
                 for i, ref in enumerate(user_refs, 1):
                     st.markdown(f"**Context {i}:**")
-                    st.write(ref.get("text", ""))
+                    st.write(f'Page_number = {ref.get("page_no", "")}')
+                    st.write(f'score = {ref.get("score", "")}')
+                    st.write(f'text = {ref.get("text", "")}')
 
             # Display context images if available
             if context_images:
